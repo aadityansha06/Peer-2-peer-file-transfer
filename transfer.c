@@ -1,8 +1,11 @@
 
 #include "lib/header.h"
 #include "lib/ui.h"
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
 
 #define Reciver_port 9090
 #define BUF_SIZE (16 * 1024) // 16kb page size 
@@ -26,7 +29,7 @@ typedef struct {
 
 void sender();
 void reciver();
-
+mode_t original_permissions ;
 typedef  enum{
     HEADER1_FAIL, // 0 filed reieving or ceating header 1 
 
@@ -35,7 +38,35 @@ typedef  enum{
     TRANSFER_SUCCESS=100,
     TRANSFER_FAIL=400,
 }response;
+int check_dir_permission(char dir_path[PATH_MAX]){
+         // using stat() to get the dir  info 
+    struct stat sb;
+        if (stat(dir_path, &sb) != 0) {
+        perror("stat");
+        return 1;
+    }
+     // Store the permissions in a mode_t variable
+     original_permissions = sb.st_mode;
+    if (!(sb.st_mode & S_IWUSR)){   // if wirte permission is missing 
+            printf("Write permission missing. Temporarily enabling...\n");
+        
+        // Add User Write permission to existing bits
+        if (chmod(dir_path, sb.st_mode | S_IWUSR) != 0) {
+            perror("Failed to change permissions");
+            return -1;
+        }
+    }
+    return  1;
+}
 
+void restore_dir_permission(char dir_path[PATH_MAX]){
+    if (chmod(dir_path, original_permissions) == 0) {
+        printf("\nOriginal directory permissions restored.\n");
+    } else {
+        perror("Failed to restore permissions");
+    }
+
+}
 int main(){
     int opt=2;
     system("clear");
@@ -279,8 +310,17 @@ void reciver(){
 
 
     send(clientfd,responseOK, strlen(responseOK) + 1, 0); // +1 for null
+         char dir_path[PATH_MAX]; // path of current dir 
+    getcwd(dir_path ,PATH_MAX); // getting user's current working dir 
 
-       system("chmod 777 ."); 
+ 
+       int permission= check_dir_permission(dir_path);
+    if (permission!=1){
+        printf("writing permission denined in this directory");
+        close(sockfd);
+        EXIT_SUCCESS;
+    
+    }
     FILE *fp = fopen(file_name,"wb");
     if (fp==NULL) {
         printf(GB_RED"Error opening writing file\n");
@@ -330,13 +370,14 @@ recive_bytes += written_bytes;
         char final_response_header[2056];
     snprintf(final_response_header,sizeof(final_response_header),"File-transfer:%d",response_code);
          send(clientfd,final_response_header, strlen(final_response_header) + 1, 0); 
-
+            restore_dir_permission(dir_path);
         fclose(fp);
         close(sockfd);
         
     }
     int any;
         printf( GB_GREEN"\nfinish reciving data" RESET);
+    restore_dir_permission(dir_path);
             printf(GB_PURPLE"\npress any number to back to the menu "RESET);
             scanf("%d",&any);
             EXIT_SUCCESS;
