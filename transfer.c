@@ -1,6 +1,6 @@
-
 #include "lib/header.h"
 #include "lib/ui.h"
+#include "lib/integrity.h"
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,9 +165,21 @@ void sender()
 
     info.file_name[sizeof(info.file_name) - 1] = '\0'; // Safety null terminator
 
+    uint8_t file_hash[SHA256_DIGEST_SIZE];
+    if (sha256_file(file_path, file_hash) != 0)
+    {
+        fprintf(stderr, GB_RED "Error hashing file");
+        fclose(fp);
+        close(sockfd);
+        return;
+    }
+    char hash_hex[SHA256_DIGEST_SIZE * 2 + 1];
+    for (int i = 0; i < SHA256_DIGEST_SIZE; i++)
+        sprintf(hash_hex + (i * 2), "%02x", file_hash[i]);
+
     char header[2056];
 
-    snprintf(header, sizeof(header), "File_Name:%s\nFile_Size:%" PRIu64 "\n", info.file_name, info.file_size);
+    snprintf(header, sizeof(header), "File_Name:%s\nFile_Size:%" PRIu64 "\nFile_Hash:%s\n", info.file_name, info.file_size, hash_hex);
 
     send(sockfd, header, strlen(header) + 1, 0); // +1 for null
 
@@ -294,7 +306,8 @@ void reciver()
     }
     char file_name[100];
     uint64_t file_size; // total file size
-    sscanf(recived_header1, "File_Name:%s\nFile_Size:%" PRIu64 "\n", file_name, &file_size);
+    char received_hash_hex[65]; // 64 chars + null
+    sscanf(recived_header1, "File_Name:%s\nFile_Size:%" PRIu64 "\nFile_Hash:%s\n", file_name, &file_size, received_hash_hex);
 
     char responseOK[100];
     response_code = RESPONSE1_OK;
@@ -350,11 +363,30 @@ void reciver()
 
     if (recive_bytes == file_size)
     {
-        response_code = TRANSFER_SUCCESS;
+        fclose(fp);
+
+        uint8_t calculated_hash[SHA256_DIGEST_SIZE];
+        sha256_file(file_name, calculated_hash);
+
+        char calculated_hash_hex[SHA256_DIGEST_SIZE * 2 + 1];
+        for (int i = 0; i < SHA256_DIGEST_SIZE; i++)
+            sprintf(calculated_hash_hex + (i * 2), "%02x", calculated_hash[i]);
+
+        if (strcmp(received_hash_hex, calculated_hash_hex) == 0)
+        {
+            printf(GB_GREEN "\nIntegrity Verified: Hash Matches\n" RESET);
+            response_code = TRANSFER_SUCCESS;
+        }
+        else
+        {
+            printf(GB_RED "\nIntegrity Check FAILED: Hash Mismatch!\n" RESET);
+            printf("Expected: %s\nActual:   %s\n", received_hash_hex, calculated_hash_hex);
+            response_code = TRANSFER_FAIL;
+        }
+
         char final_response_header[2056];
         snprintf(final_response_header, sizeof(final_response_header), "File-transfer:%d", response_code);
         send(clientfd, final_response_header, strlen(final_response_header) + 1, 0);
-        fclose(fp);
         close(sockfd);
     }
     else
