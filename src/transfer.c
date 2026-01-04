@@ -1,6 +1,8 @@
 #include "lib/header.h"
 #include "lib/ui.h"
 #include "lib/integrity.h"
+#include "lib/path_utils.h"
+#include "lib/progressbar.h"
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,8 +112,40 @@ void sender()
         ;
     printf(GB_BLUE "\n enter the reciver's ip address \t");
     scanf("%s", reciver_ip_addr);
+    
+    // Consume leftover newline from scanf
+    int ch;
+    while ((ch = getchar()) != '\n' && ch != EOF);
+
     printf(GB_YELLOW "\n Enter the file path :  ");
-    scanf("%s", file_path);
+    if (fgets(file_path, PATH_MAX, stdin) != NULL) {
+        size_t len = strlen(file_path);
+        if (len > 0 && file_path[len - 1] == '\n') {
+            file_path[len - 1] = '\0';
+            len--;
+        }
+
+        // Trim leading whitespace
+        char *start = file_path;
+        while (*start && isspace((unsigned char)*start)) start++;
+        if (start != file_path) {
+            memmove(file_path, start, strlen(start) + 1);
+            len = strlen(file_path);
+        }
+
+        // Trim trailing whitespace
+        while (len > 0 && isspace((unsigned char)file_path[len - 1])) {
+            file_path[len - 1] = '\0';
+            len--;
+        }
+        
+        // Handle quotes (single or double)
+        if (len >= 2 && ((file_path[0] == '\'' && file_path[len - 1] == '\'') || 
+                         (file_path[0] == '"' && file_path[len - 1] == '"'))) {
+            memmove(file_path, file_path + 1, len - 2);
+            file_path[len - 2] = '\0';
+        }
+    }
 
     FILE *fp;
     fp = fopen(file_path, "rb");
@@ -152,18 +186,11 @@ void sender()
         EXIT_FAILURE;
     }
     printf(GB_GREEN "Connected to recvier.\n");
-    // Create a mutable copy of the file_path
-    char *filename = strrchr(file_path, '/');
-    if (filename == NULL)
-    {
-        strncpy(info.file_name, file_path, sizeof(info.file_name) - 1); // No slash found, the whole string is the filename
-    }
-    else
-    {
-        strncpy(info.file_name, filename + 1, sizeof(info.file_name) - 1); // Move past the '/' to get filename
-    }
-
+    // Extract filename using path_utils
+    const char *filename = get_filename(file_path);
+    strncpy(info.file_name, filename, sizeof(info.file_name) - 1);
     info.file_name[sizeof(info.file_name) - 1] = '\0'; // Safety null terminator
+    sanitize_filename(info.file_name);
 
     uint8_t file_hash[SHA256_DIGEST_SIZE];
     if (sha256_file(file_path, file_hash) != 0)
@@ -200,6 +227,7 @@ void sender()
         printf(GB_GREEN "Buffer created sucessfully \n sending file...\n" RESET);
         char buffer[BUF_SIZE];
         ssize_t n;
+        uint64_t total_sent = 0;
         // reading  16kb at once
         while ((n = fread(buffer, 1, BUF_SIZE, fp)) > 0)
         {
@@ -214,7 +242,10 @@ void sender()
                 }
                 sent += s;
             }
+            total_sent += sent;
+            progressbar(total_sent, info.file_size);
         }
+        printf("\n");
 
         // data sent sucessfully ? checking whether reciver has wrote it or not
         printf(GB_AQUA "\nData sent sucessfully\n waiting for recvier confirmation ..." RESET);
@@ -357,9 +388,9 @@ void reciver()
         }
 
         recive_bytes += written_bytes;
-        printf(GB_BLUE BOLD "\n\rProgress: %" PRIu64 "/%" PRIu64 " bytes" RESET, recive_bytes, file_size);
-        fflush(stdout);
+        progressbar(recive_bytes, file_size);
     }
+    printf("\n");
 
     if (recive_bytes == file_size)
     {

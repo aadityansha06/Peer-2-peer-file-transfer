@@ -40,11 +40,11 @@ Implement cryptographic hash verification using SHA-256:
 - Send hash as hex string in header: `File_Hash:a3b2c1d4e5f6...`
 
 ### Acceptance Criteria
-- [ ] SHA-256 hash calculated on sender side
-- [ ] Hash included in transfer header
-- [ ] Receiver verifies hash after complete transfer
-- [ ] Transfer marked as failed if hashes don't match
-- [ ] Works with large files (1GB+) without memory issues
+- [x] SHA-256 hash calculated on sender side
+- [x] Hash included in transfer header
+- [x] Receiver verifies hash after complete transfer
+- [x] Transfer marked as failed if hashes don't match
+- [x] Works with large files (1GB+) without memory issues
 
 ### References
 - [OpenSSL SHA-256 Documentation](https://www.openssl.org/docs/man3.0/man3/SHA256.html)

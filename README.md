@@ -12,10 +12,10 @@ found bugs? got ideas? want to contribute? feel free to [raise an issue](https:/
 
 ## Installation
 
-**clone the repo**:
 ```bash
 git clone https://github.com/aadityansha06/Peer-2-peer-file-transfer.git
 cd Peer-2-peer-file-transfer
+mkdir build && cd build && cmake .. && make
 ```
 
 ## How It Works
