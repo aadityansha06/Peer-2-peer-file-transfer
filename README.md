@@ -15,7 +15,7 @@ found bugs? got ideas? want to contribute? feel free to [raise an issue](https:/
 ```bash
 git clone https://github.com/aadityansha06/Peer-2-peer-file-transfer.git
 cd Peer-2-peer-file-transfer
-mkdir build && cd build && cmake .. && make
+zig build
 ```
 
 ## How It Works
